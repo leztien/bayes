@@ -1,3 +1,4 @@
+
 """
 default dictionary of (prior, conditional and marginal) probabilities for univariate bayes analysis
 the probabilities are added to the dictionary on the go i.e. on demand
@@ -25,7 +26,7 @@ def make_data():
 
 
 from collections import defaultdict
-class Dictionary(defaultdict):
+class BayesProbabilitiesDictionary(defaultdict):   
     """dictionary of probabilities on demand for univariate descrete bayes analysis"""
     def __init__(self, x:'array of x values', y:'array of target values'):
         self.default_factory = self._func
@@ -37,7 +38,7 @@ class Dictionary(defaultdict):
         d = {c:yy.count(c)/m for c in sorted(set(yy))}
         self.update(d)
     
-    def _func(self, k:'as tuple'):
+    def _func(self, k:'as tuple'):  # calculates conditionals and marginals
         if isinstance(k, tuple) and len(k)==2:  # calculates conditionals
             v,c = k
             g = zip(self.xx, self.yy)
@@ -52,14 +53,46 @@ class Dictionary(defaultdict):
         v = self.default_factory.__call__(k)
         self.__setitem__(k,v)
         return self.__getitem__(k)
+    
+    def _numerator(self, x,y):
+        return self[y] * self[x,y]
+    
+    def predict(self, x):
+        scores = [self._numerator(x,c) for c in self.cc]
+        ypred = scores.index(max(scores))
+        return ypred
+    
+    def posterior(self, y,x):
+        numerator = self._numerator(x,y)
+        normalizer = self[x]
+        return numerator/normalizer
+        
 
 #================================================================================
 
 
 X,y = make_data()
     
-d = Dictionary(X,y)
+d = BayesProbabilitiesDictionary(X,y)
 
 p = d[1]        #prior
-p = d[('a',1)]  #conditionla
+p = d[('a',1)]  #conditional
 p = d['b']      #marginal
+
+ypred = [d.predict(x) for x in X]
+accuracy = sum(y1==y2 for y1,y2 in zip(y,ypred))/len(y)
+print("my accuracy", accuracy)
+
+P = [[d.posterior(y,x) for y in sorted(set(y))] for x in X]
+P = np.array(P)
+
+from sklearn.naive_bayes import BernoulliNB
+from sklearn.preprocessing import OneHotEncoder
+X = np.array(X).reshape(-1,1)
+X = OneHotEncoder(categories='auto').fit_transform(X)
+md = BernoulliNB(alpha=1E-9).fit(X,y)
+ypred = md.predict(X)
+accuracy = md.score(X,y)
+print("sklearn accuracy", accuracy)
+
+
